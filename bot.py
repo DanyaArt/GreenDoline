@@ -18,32 +18,10 @@ def init_db():
              user_id INTEGER UNIQUE,
              first_name TEXT,
              last_name TEXT,
-             middle_name TEXT,
              phone TEXT,
              school TEXT,
              class TEXT,
-             password_hash TEXT,
-             tg TEXT,
              register_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    
-    cursor.execute('''CREATE TABLE IF NOT EXISTS messages
-             (id INTEGER PRIMARY KEY AUTOINCREMENT,
-             user_id INTEGER,
-             sender TEXT,
-             message TEXT,
-             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    
-    cursor.execute('''CREATE TABLE IF NOT EXISTS test_results
-             (id INTEGER PRIMARY KEY AUTOINCREMENT,
-             user_id INTEGER,
-             dominant_type TEXT,
-             human_nature REAL,
-             human_tech REAL,
-             human_human REAL,
-             human_sign REAL,
-             human_art REAL,
-             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    
     conn.commit()
     return conn, cursor
 
@@ -53,6 +31,23 @@ conn, cursor = init_db()
 # Теперь можно инициализировать бота
 TOKEN = '7709800436:AAG9zdInNqWmU-TW7IuzioHhy_McWnqLw0w'
 bot = telebot.TeleBot(TOKEN)
+
+
+# Подключение к базе данных
+conn = sqlite3.connect('users.db', check_same_thread=False)
+cursor = conn.cursor()
+
+# Создание таблицы пользователей
+cursor.execute('''CREATE TABLE IF NOT EXISTS users
+             (id INTEGER PRIMARY KEY AUTOINCREMENT,
+             user_id INTEGER UNIQUE,
+             first_name TEXT,
+             last_name TEXT,
+             phone TEXT,
+             school TEXT,
+             class TEXT,
+             register_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+conn.commit()
 
 def get_main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -177,20 +172,26 @@ def process_middle_name(message, last_name, first_name):
 def process_phone(message, last_name, first_name, middle_name):
     if message.text == 'Отмена':
         return start(message)
-    if message.contact:
-        phone = message.contact.phone_number
-    else:
-        phone = message.text
-    # Проверка уникальности телефона
+    phone = message.contact.phone_number if message.contact else message.text.strip()
+    # Проверка: номер телефона должен содержать только цифры и быть длиной 10-15 символов
+    phone_clean = ''.join(filter(str.isdigit, phone))
+    if len(phone_clean) < 10 or len(phone_clean) > 15:
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(types.KeyboardButton('Отмена'))
+        msg = bot.send_message(message.chat.id, "Пожалуйста, введите корректный номер телефона (10-15 цифр):", reply_markup=markup)
+        return bot.register_next_step_handler(msg, lambda m: process_phone(m, last_name, first_name, middle_name))
+    
     with sqlite3.connect('users.db', check_same_thread=False) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT 1 FROM users WHERE phone = ?", (phone,))
         exists = cursor.fetchone()
+    
     if exists:
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
         markup.add(types.KeyboardButton('Отмена'))
         msg = bot.send_message(message.chat.id, "Пользователь с таким номером уже существует. Пожалуйста, используйте другой номер или войдите в свой аккаунт.", reply_markup=markup)
         return bot.register_next_step_handler(msg, lambda m: process_phone(m, last_name, first_name, middle_name))
+    
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(types.KeyboardButton('Отмена'))
     msg = bot.send_message(message.chat.id, "Введите номер вашей школы:", reply_markup=markup)
