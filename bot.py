@@ -18,10 +18,32 @@ def init_db():
              user_id INTEGER UNIQUE,
              first_name TEXT,
              last_name TEXT,
+             middle_name TEXT,
              phone TEXT,
              school TEXT,
              class TEXT,
+             password_hash TEXT,
+             tg TEXT,
              register_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    
+    cursor.execute('''CREATE TABLE IF NOT EXISTS messages
+             (id INTEGER PRIMARY KEY AUTOINCREMENT,
+             user_id INTEGER,
+             sender TEXT,
+             message TEXT,
+             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    
+    cursor.execute('''CREATE TABLE IF NOT EXISTS test_results
+             (id INTEGER PRIMARY KEY AUTOINCREMENT,
+             user_id INTEGER,
+             dominant_type TEXT,
+             human_nature REAL,
+             human_tech REAL,
+             human_human REAL,
+             human_sign REAL,
+             human_art REAL,
+             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    
     conn.commit()
     return conn, cursor
 
@@ -31,23 +53,6 @@ conn, cursor = init_db()
 # Теперь можно инициализировать бота
 TOKEN = '7709800436:AAG9zdInNqWmU-TW7IuzioHhy_McWnqLw0w'
 bot = telebot.TeleBot(TOKEN)
-
-
-# Подключение к базе данных
-conn = sqlite3.connect('users.db', check_same_thread=False)
-cursor = conn.cursor()
-
-# Создание таблицы пользователей
-cursor.execute('''CREATE TABLE IF NOT EXISTS users
-             (id INTEGER PRIMARY KEY AUTOINCREMENT,
-             user_id INTEGER UNIQUE,
-             first_name TEXT,
-             last_name TEXT,
-             phone TEXT,
-             school TEXT,
-             class TEXT,
-             register_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-conn.commit()
 
 def get_main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -179,7 +184,7 @@ def process_phone(message, last_name, first_name, middle_name):
     # Проверка уникальности телефона
     with sqlite3.connect('users.db', check_same_thread=False) as conn:
         cursor = conn.cursor()
-    cursor.execute("SELECT 1 FROM users WHERE phone = ?", (phone,))
+        cursor.execute("SELECT 1 FROM users WHERE phone = ?", (phone,))
         exists = cursor.fetchone()
     if exists:
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -397,14 +402,3 @@ def back_to_menu(message):
 if __name__ == '__main__':
     print("Бот запущен...")
     bot.infinity_polling()
-
-@bot.message_handler(func=lambda m: m.text and not m.text.startswith('/'))
-def save_user_message(message):
-    try:
-        conn = sqlite3.connect('users.db')
-        cursor = conn.cursor()
-        cursor.execute('INSERT INTO messages (user_id, sender, message) VALUES (?, ?, ?)', (message.from_user.id, 'user', message.text))
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print(f'Ошибка при сохранении сообщения пользователя: {e}')
