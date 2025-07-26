@@ -1,10 +1,63 @@
-import telebot
+#!/usr/bin/env python3
+"""
+Render Hosting Setup for Telegram Bot
+Настройка хостинга Telegram бота на Render
+"""
+
+import os
+import json
+
+def create_render_files():
+    """Create files needed for Render deployment"""
+    
+    # Render configuration
+    render_yaml = """services:
+  - type: web
+    name: telegram-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: BOT_TOKEN
+        value: 7709800436:AAG9zdInNqWmU-TW7IuzioHhy_McWnqLw0w
+      - key: PORT
+        value: 5000
+      - key: DATABASE_URL
+        value: sqlite:///users.db
+      - key: WEBHOOK_URL
+        value: https://your-app-name.onrender.com/webhook
+    healthCheckPath: /
+    autoDeploy: true
+    plan: free
+"""
+    
+    with open('render.yaml', 'w', encoding='utf-8') as f:
+        f.write(render_yaml)
+    
+    # Requirements for Render
+    requirements_content = """flask==2.3.3
+python-telegram-bot==20.6
+requests==2.31.0
+python-dotenv==1.0.0
+gunicorn==21.2.0
+"""
+    
+    with open('requirements.txt', 'w') as f:
+        f.write(requirements_content)
+    
+    # Bot for Render (with Flask)
+    bot_render_content = """import telebot
 from datetime import datetime
 import time
 from telebot import types
 import sqlite3
 import hashlib
 import os
+from flask import Flask, request, jsonify
+import requests
+
+# Flask app for Render
+app = Flask(__name__)
 
 def hash_password(password):
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
@@ -19,50 +72,30 @@ def init_db():
              user_id INTEGER UNIQUE,
              first_name TEXT,
              last_name TEXT,
+             middle_name TEXT,
              phone TEXT,
              school TEXT,
              class TEXT,
-             register_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    # Миграция: добавляем недостающие поля, если их нет
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN middle_name TEXT")
-    except sqlite3.OperationalError:
-        pass  # поле уже есть
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
-    except sqlite3.OperationalError:
-        pass  # поле уже есть
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN tg TEXT")
-    except sqlite3.OperationalError:
-        pass  # поле уже есть
+             register_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+             password_hash TEXT)''')
+    
+    # Create messages table if not exists
+    cursor.execute('''CREATE TABLE IF NOT EXISTS messages
+             (id INTEGER PRIMARY KEY AUTOINCREMENT,
+             user_id INTEGER,
+             sender TEXT,
+             message TEXT,
+             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    
     conn.commit()
     return conn, cursor
 
 # Инициализация базы данных
 conn, cursor = init_db()
 
-# Получаем токен бота из переменной окружения или используем локальный
-TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '7709800436:AAG9zdInNqWmU-TW7IuzioHhy_McWnqLw0w')
-bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
-
-
-# Подключение к базе данных
-conn = sqlite3.connect('users.db', check_same_thread=False)
-cursor = conn.cursor()
-
-# Создание таблицы пользователей
-# (Этот блок ниже можно удалить, чтобы не было дублирования, если выше уже есть init_db)
-# cursor.execute('''CREATE TABLE IF NOT EXISTS users
-#              (id INTEGER PRIMARY KEY AUTOINCREMENT,
-#              user_id INTEGER UNIQUE,
-#              first_name TEXT,
-#              last_name TEXT,
-#              phone TEXT,
-#              school TEXT,
-#              class TEXT,
-#              register_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-# conn.commit()
+# Получаем токен бота из переменной окружения
+BOT_TOKEN = os.environ.get('BOT_TOKEN', '7709800436:AAG9zdInNqWmU-TW7IuzioHhy_McWnqLw0w')
+bot = telebot.TeleBot(BOT_TOKEN)
 
 def get_main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -196,11 +229,11 @@ def process_phone(message, last_name, first_name, middle_name):
         cursor = conn.cursor()
         cursor.execute("SELECT 1 FROM users WHERE phone = ?", (phone,))
         exists = cursor.fetchone()
-        if exists:
-            markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-            markup.add(types.KeyboardButton('Отмена'))
-            msg = bot.send_message(message.chat.id, "Пользователь с таким номером уже существует. Пожалуйста, используйте другой номер или войдите в свой аккаунт.", reply_markup=markup)
-            return bot.register_next_step_handler(msg, lambda m: process_phone(m, last_name, first_name, middle_name))
+    if exists:
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(types.KeyboardButton('Отмена'))
+        msg = bot.send_message(message.chat.id, "Пользователь с таким номером уже существует. Пожалуйста, используйте другой номер или войдите в свой аккаунт.", reply_markup=markup)
+        return bot.register_next_step_handler(msg, lambda m: process_phone(m, last_name, first_name, middle_name))
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(types.KeyboardButton('Отмена'))
     msg = bot.send_message(message.chat.id, "Введите номер вашей школы:", reply_markup=markup)
@@ -223,7 +256,6 @@ def process_school(message, last_name, first_name, middle_name, phone):
     markup.add(types.KeyboardButton('Отмена'))
     msg = bot.send_message(message.chat.id, "Выберите ваш класс:", reply_markup=markup)
     bot.register_next_step_handler(msg, lambda m: process_class(m, last_name, first_name, middle_name, phone, school))
-
 
 def process_class(message, last_name, first_name, middle_name, phone, school):
     if message.text == 'Отмена':
@@ -287,8 +319,9 @@ def process_password2(message, last_name, first_name, middle_name, phone, school
                 )
                 print('Пользователь успешно добавлен!')
                 bot.send_message(message.chat.id, "✅ Регистрация завершена!", reply_markup=types.ReplyKeyboardRemove())
+            
             conn.commit()
-        show_menu(message)
+            show_menu(message)
     except Exception as e:
         import traceback
         print('Ошибка при регистрации:', traceback.format_exc())
@@ -423,7 +456,7 @@ def delete_profile(message):
 def back_to_menu(message):
     show_menu(message)
 
-# Сохранение сообщений пользователя (должен быть последним обработчиком)
+# Сохранение сообщений пользователя
 @bot.message_handler(func=lambda m: m.text and not m.text.startswith('/') and m.text not in [
     "👤 Мой профиль", "✏️ Изменить данные", "🗑️ Удалить профиль",
     "Изменить имя", "Изменить телефон", "Изменить школу", "Изменить класс",
@@ -438,7 +471,200 @@ def save_user_message(message):
     except Exception as e:
         print(f'Ошибка при сохранении сообщения пользователя: {e}')
 
-# Запуск бота
+# Flask routes for Render
+@app.route('/')
+def home():
+    return jsonify({
+        'status': 'online',
+        'service': 'Telegram Bot on Render',
+        'uptime': '24/7',
+        'message': 'Bot is running on Render!'
+    })
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    if request.method == 'POST':
+        bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
+        return 'ok', 200
+
+@app.route('/status')
+def status():
+    return jsonify({
+        'bot_status': 'running',
+        'database': 'connected',
+        'users_count': len(cursor.execute("SELECT * FROM users").fetchall())
+    })
+
+@app.route('/set_webhook')
+def set_webhook():
+    try:
+        webhook_url = request.args.get('url', 'https://your-app-name.onrender.com/webhook')
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook"
+        data = {"url": webhook_url}
+        response = requests.post(url, json=data)
+        return jsonify(response.json())
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+# Render specific configuration
 if __name__ == '__main__':
-    print("Бот запущен...")
-    bot.infinity_polling()
+    print("Bot starting on Render...")
+    # Set webhook for Render
+    try:
+        webhook_url = os.environ.get('WEBHOOK_URL', 'https://your-app-name.onrender.com/webhook')
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook"
+        data = {"url": webhook_url}
+        response = requests.post(url, json=data)
+        print(f"Webhook set: {response.json()}")
+    except Exception as e:
+        print(f"Error setting webhook: {e}")
+    
+    # Start Flask app
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
+"""
+    
+    with open('bot_render.py', 'w', encoding='utf-8') as f:
+        f.write(bot_render_content)
+    
+    # Render deployment guide
+    deployment_guide = """# Render Deployment Guide
+# Руководство по деплою на Render
+
+## 🚀 Quick Setup (Быстрая настройка)
+
+### 1. Create GitHub Repository (Создайте GitHub репозиторий)
+1. Go to GitHub.com
+2. Create new repository
+3. Upload these files:
+   - bot_render.py (rename to bot.py)
+   - requirements.txt
+   - render.yaml
+   - users.db (if exists)
+
+### 2. Deploy on Render (Деплой на Render)
+1. Go to https://render.com
+2. Sign up with GitHub
+3. Click "New +" → "Web Service"
+4. Connect your GitHub repository
+5. Configure:
+   - Name: telegram-bot
+   - Environment: Python
+   - Build Command: pip install -r requirements.txt
+   - Start Command: python bot.py
+
+### 3. Set Environment Variables (Настройка переменных)
+In Render dashboard, add:
+- BOT_TOKEN = 7709800436:AAG9zdInNqWmU-TW7IuzioHhy_McWnqLw0w
+- PORT = 5000
+- DATABASE_URL = sqlite:///users.db
+- WEBHOOK_URL = https://your-app-name.onrender.com/webhook
+
+### 4. Deploy (Деплой)
+1. Click "Create Web Service"
+2. Wait for deployment
+3. Copy your app URL
+
+### 5. Set Webhook (Настройка вебхука)
+After deployment, visit:
+https://your-app-name.onrender.com/set_webhook
+
+## 📁 File Structure (Структура файлов)
+
+```
+your-repo/
+├── bot.py              # Main bot application
+├── requirements.txt    # Python dependencies
+├── render.yaml         # Render configuration
+└── users.db           # SQLite database
+```
+
+## 🔧 Configuration (Конфигурация)
+
+### Environment Variables (Переменные окружения)
+- BOT_TOKEN: Your Telegram bot token
+- WEBHOOK_URL: https://your-app-name.onrender.com/webhook
+- PORT: 5000 (Render will set this)
+- DATABASE_URL: sqlite:///users.db
+
+### Webhook Setup (Настройка вебхука)
+After deployment, set webhook:
+```python
+import requests
+
+def set_webhook():
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook"
+    webhook_url = "https://your-app-name.onrender.com/webhook"
+    data = {"url": webhook_url}
+    response = requests.post(url, json=data)
+    print(response.json())
+```
+
+## 🎯 Testing (Тестирование)
+
+### Online Test (Онлайн тестирование)
+1. Visit: https://your-app-name.onrender.com
+2. Should see bot status page
+3. Test bot in Telegram
+
+## 🆘 Troubleshooting (Устранение проблем)
+
+### Bot not responding:
+- Check BOT_TOKEN in environment variables
+- Verify webhook URL is correct
+- Check Render logs
+
+### 500 Error:
+- Check bot.py syntax
+- Verify requirements.txt
+- Check Render build logs
+
+### SSL Issues:
+- Render provides SSL automatically
+- Update webhook URL to HTTPS
+
+## 📊 Render Features (Возможности Render)
+
+✅ **Free SSL Certificate** - Автоматический SSL  
+✅ **Custom Domain** - Свой домен  
+✅ **Python Support** - Поддержка Python  
+✅ **SQLite Database** - Встроенная база данных  
+✅ **24/7 Uptime** - Работает круглосуточно  
+✅ **Auto Deploy** - Автоматический деплой  
+✅ **Logs & Monitoring** - Логи и мониторинг  
+
+## 🎉 Success! (Успех!)
+
+After setup, your bot will work 24/7 even when your PC is off!
+После настройки ваш бот будет работать 24/7 даже когда ПК выключен!
+"""
+    
+    with open('RENDER_GUIDE.md', 'w', encoding='utf-8') as f:
+        f.write(deployment_guide)
+
+def main():
+    print("🌐 Creating Render hosting files...")
+    print("=" * 50)
+    
+    # Create deployment files
+    create_render_files()
+    
+    print("✅ Render files created!")
+    print()
+    print("📁 Files created:")
+    print("- render.yaml (Render configuration)")
+    print("- bot_render.py (Bot for Render)")
+    print("- requirements.txt (Python dependencies)")
+    print("- RENDER_GUIDE.md (Detailed guide)")
+    print()
+    print("🚀 Next Steps:")
+    print("1. Read: RENDER_GUIDE.md")
+    print("2. Upload to GitHub")
+    print("3. Connect to Render")
+    print("4. Set environment variables")
+    print("5. Deploy")
+    print()
+    print("🌍 Your bot will work 24/7 on Render!")
+
+if __name__ == "__main__":
+    main() 

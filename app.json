@@ -1,0 +1,33 @@
+{
+  "name": "Telegram Bot",
+  "description": "Telegram bot with web interface",
+  "repository": "https://github.com/yourusername/your-repo",
+  "logo": "",
+  "keywords": [
+    "python",
+    "telegram",
+    "bot",
+    "flask"
+  ],
+  "env": {
+    "BOT_TOKEN": {
+      "description": "Telegram Bot Token",
+      "value": "7709800436:AAG9zdInNqWmU-TW7IuzioHhy_McWnqLw0w"
+    },
+    "PORT": {
+      "description": "Port for web server",
+      "value": "5000"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "free"
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ]
+}

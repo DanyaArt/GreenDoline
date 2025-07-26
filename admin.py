@@ -3,11 +3,14 @@ import sqlite3
 from datetime import datetime
 import hashlib
 import telebot
-TELEGRAM_BOT_TOKEN = '7709800436:AAG9zdInNqWmU-TW7IuzioHhy_McWnqLw0w'
-bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
+import os
 import smtplib
 from email.message import EmailMessage
 import base64
+
+# Получаем токен бота из переменной окружения или используем локальный
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '7709800436:AAG9zdInNqWmU-TW7IuzioHhy_McWnqLw0w')
+bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
 
 def get_test_stats_sqlite(user_id):
@@ -323,4 +326,5 @@ def send_test_result_email():
         return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)

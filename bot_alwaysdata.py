@@ -5,6 +5,11 @@ from telebot import types
 import sqlite3
 import hashlib
 import os
+from flask import Flask, request, jsonify
+import requests
+
+# Flask app for AlwaysData
+app = Flask(__name__)
 
 def hash_password(password):
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
@@ -19,50 +24,30 @@ def init_db():
              user_id INTEGER UNIQUE,
              first_name TEXT,
              last_name TEXT,
+             middle_name TEXT,
              phone TEXT,
              school TEXT,
              class TEXT,
-             register_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    # Миграция: добавляем недостающие поля, если их нет
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN middle_name TEXT")
-    except sqlite3.OperationalError:
-        pass  # поле уже есть
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
-    except sqlite3.OperationalError:
-        pass  # поле уже есть
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN tg TEXT")
-    except sqlite3.OperationalError:
-        pass  # поле уже есть
+             register_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+             password_hash TEXT)''')
+    
+    # Create messages table if not exists
+    cursor.execute('''CREATE TABLE IF NOT EXISTS messages
+             (id INTEGER PRIMARY KEY AUTOINCREMENT,
+             user_id INTEGER,
+             sender TEXT,
+             message TEXT,
+             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    
     conn.commit()
     return conn, cursor
 
 # Инициализация базы данных
 conn, cursor = init_db()
 
-# Получаем токен бота из переменной окружения или используем локальный
-TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '7709800436:AAG9zdInNqWmU-TW7IuzioHhy_McWnqLw0w')
-bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
-
-
-# Подключение к базе данных
-conn = sqlite3.connect('users.db', check_same_thread=False)
-cursor = conn.cursor()
-
-# Создание таблицы пользователей
-# (Этот блок ниже можно удалить, чтобы не было дублирования, если выше уже есть init_db)
-# cursor.execute('''CREATE TABLE IF NOT EXISTS users
-#              (id INTEGER PRIMARY KEY AUTOINCREMENT,
-#              user_id INTEGER UNIQUE,
-#              first_name TEXT,
-#              last_name TEXT,
-#              phone TEXT,
-#              school TEXT,
-#              class TEXT,
-#              register_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-# conn.commit()
+# Получаем токен бота из переменной окружения
+BOT_TOKEN = os.environ.get('BOT_TOKEN', '7709800436:AAG9zdInNqWmU-TW7IuzioHhy_McWnqLw0w')
+bot = telebot.TeleBot(BOT_TOKEN)
 
 def get_main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -196,11 +181,11 @@ def process_phone(message, last_name, first_name, middle_name):
         cursor = conn.cursor()
         cursor.execute("SELECT 1 FROM users WHERE phone = ?", (phone,))
         exists = cursor.fetchone()
-        if exists:
-            markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-            markup.add(types.KeyboardButton('Отмена'))
-            msg = bot.send_message(message.chat.id, "Пользователь с таким номером уже существует. Пожалуйста, используйте другой номер или войдите в свой аккаунт.", reply_markup=markup)
-            return bot.register_next_step_handler(msg, lambda m: process_phone(m, last_name, first_name, middle_name))
+    if exists:
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(types.KeyboardButton('Отмена'))
+        msg = bot.send_message(message.chat.id, "Пользователь с таким номером уже существует. Пожалуйста, используйте другой номер или войдите в свой аккаунт.", reply_markup=markup)
+        return bot.register_next_step_handler(msg, lambda m: process_phone(m, last_name, first_name, middle_name))
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(types.KeyboardButton('Отмена'))
     msg = bot.send_message(message.chat.id, "Введите номер вашей школы:", reply_markup=markup)
@@ -223,7 +208,6 @@ def process_school(message, last_name, first_name, middle_name, phone):
     markup.add(types.KeyboardButton('Отмена'))
     msg = bot.send_message(message.chat.id, "Выберите ваш класс:", reply_markup=markup)
     bot.register_next_step_handler(msg, lambda m: process_class(m, last_name, first_name, middle_name, phone, school))
-
 
 def process_class(message, last_name, first_name, middle_name, phone, school):
     if message.text == 'Отмена':
@@ -266,28 +250,13 @@ def process_password2(message, last_name, first_name, middle_name, phone, school
         print('Попытка вставки пользователя в БД...')
         with sqlite3.connect('users.db', check_same_thread=False) as conn:
             cursor = conn.cursor()
-            
-            # Проверяем, существует ли пользователь с таким user_id
-            cursor.execute("SELECT 1 FROM users WHERE user_id = ?", (message.from_user.id,))
-            existing_user = cursor.fetchone()
-            
-            if existing_user:
-                # Пользователь уже существует, обновляем данные
-                cursor.execute(
-                    "UPDATE users SET first_name=?, last_name=?, middle_name=?, phone=?, school=?, class=?, password_hash=? WHERE user_id=?",
-                    (first_name, last_name, middle_name, phone, school, class_num, password_hash, message.from_user.id)
-                )
-                print('Данные пользователя обновлены!')
-                bot.send_message(message.chat.id, "✅ Данные обновлены!", reply_markup=types.ReplyKeyboardRemove())
-            else:
-                # Новый пользователь, вставляем
-                cursor.execute(
-                    "INSERT INTO users (user_id, first_name, last_name, middle_name, phone, school, class, register_date, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)",
-                    (message.from_user.id, first_name, last_name, middle_name, phone, school, class_num, password_hash)
-                )
-                print('Пользователь успешно добавлен!')
-                bot.send_message(message.chat.id, "✅ Регистрация завершена!", reply_markup=types.ReplyKeyboardRemove())
+            cursor.execute(
+                "INSERT INTO users (user_id, first_name, last_name, middle_name, phone, school, class, register_date, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)",
+                (message.from_user.id, first_name, last_name, middle_name, phone, school, class_num, password_hash)
+            )
             conn.commit()
+        print('Пользователь успешно добавлен!')
+        bot.send_message(message.chat.id, "✅ Регистрация завершена!", reply_markup=types.ReplyKeyboardRemove())
         show_menu(message)
     except Exception as e:
         import traceback
@@ -423,7 +392,7 @@ def delete_profile(message):
 def back_to_menu(message):
     show_menu(message)
 
-# Сохранение сообщений пользователя (должен быть последним обработчиком)
+# Сохранение сообщений пользователя
 @bot.message_handler(func=lambda m: m.text and not m.text.startswith('/') and m.text not in [
     "👤 Мой профиль", "✏️ Изменить данные", "🗑️ Удалить профиль",
     "Изменить имя", "Изменить телефон", "Изменить школу", "Изменить класс",
@@ -438,7 +407,54 @@ def save_user_message(message):
     except Exception as e:
         print(f'Ошибка при сохранении сообщения пользователя: {e}')
 
-# Запуск бота
+# Flask routes for AlwaysData
+@app.route('/')
+def home():
+    return jsonify({
+        'status': 'online',
+        'service': 'Telegram Bot',
+        'uptime': '24/7',
+        'message': 'Bot is running on AlwaysData!'
+    })
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    if request.method == 'POST':
+        bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
+        return 'ok', 200
+
+@app.route('/status')
+def status():
+    return jsonify({
+        'bot_status': 'running',
+        'database': 'connected',
+        'users_count': len(cursor.execute("SELECT * FROM users").fetchall())
+    })
+
+@app.route('/set_webhook')
+def set_webhook():
+    try:
+        webhook_url = request.args.get('url', 'https://your-domain.alwaysdata.net/webhook')
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook"
+        data = {"url": webhook_url}
+        response = requests.post(url, json=data)
+        return jsonify(response.json())
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+# AlwaysData specific configuration
 if __name__ == '__main__':
-    print("Бот запущен...")
-    bot.infinity_polling()
+    print("Bot starting on AlwaysData...")
+    # Set webhook for AlwaysData
+    try:
+        webhook_url = os.environ.get('WEBHOOK_URL', 'https://your-domain.alwaysdata.net/webhook')
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook"
+        data = {"url": webhook_url}
+        response = requests.post(url, json=data)
+        print(f"Webhook set: {response.json()}")
+    except Exception as e:
+        print(f"Error setting webhook: {e}")
+    
+    # Start Flask app
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False) 

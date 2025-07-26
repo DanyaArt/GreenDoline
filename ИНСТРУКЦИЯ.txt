@@ -1,0 +1,39 @@
+УСТАНОВКА ДОМАШНЕГО СЕРВЕРА
+============================
+
+1. ЗАПУСК УСТАНОВКИ:
+   - Запустите файл "quick_start.bat" от имени администратора
+   - Следуйте инструкциям на экране
+
+2. ВКЛЮЧЕНИЕ WSL2 (важно!):
+   - Откройте PowerShell от имени администратора
+   - Выполните команды:
+     dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all
+     dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all
+   - Перезагрузите компьютер
+
+3. УСТАНОВКА LINUX:
+   - После перезагрузки откройте PowerShell
+   - Выполните: wsl --install -d Ubuntu
+   - Дождитесь завершения установки
+
+4. НАСТРОЙКА СЕРВЕРА:
+   - Прочитайте файл: C:\server\WSL2_SETUP.md
+   - Выполните команды из инструкции
+
+5. ЗАПУСК СЕРВЕРА:
+   - C:\server\start_server.bat
+
+ДОСТУП К СЕРВИСАМ:
+- Сайт: http://localhost:5000
+- Админ панель: http://localhost:5000/admin
+
+УПРАВЛЕНИЕ:
+- Запуск: C:\server\start_server.bat
+- Остановка: C:\server\stop_server.bat
+- Статус: C:\server\status_server.bat
+
+ПОДДЕРЖКА:
+- Все файлы находятся в C:\server\
+- Логи: C:\server\logs\
+- Конфигурация: C:\server\config\ 

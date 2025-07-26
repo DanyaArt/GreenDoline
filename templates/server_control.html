@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление домашним сервером</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            border-left: 4px solid #007bff;
+        }
+
+        .card h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .status-item:last-child {
+            border-bottom: none;
+        }
+
+        .status-badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .status-running {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-stopped {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-unknown {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .btn {
+            padding: 15px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            text-align: center;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0056b3;
+            transform: translateY(-2px);
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #1e7e34;
+            transform: translateY(-2px);
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+            transform: translateY(-2px);
+        }
+
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .btn-warning:hover {
+            background: #e0a800;
+            transform: translateY(-2px);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #007bff, #0056b3);
+            transition: width 0.3s ease;
+        }
+
+        .progress-fill.warning {
+            background: linear-gradient(90deg, #ffc107, #e0a800);
+        }
+
+        .progress-fill.danger {
+            background: linear-gradient(90deg, #dc3545, #c82333);
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .info-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .info-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        .info-label {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        .logs-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .logs-link a {
+            color: #007bff;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .logs-link a:hover {
+            text-decoration: underline;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .controls {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏠 Домашний сервер</h1>
+            <p>Ryzen 7 5700U • 8GB RAM • Ubuntu Server</p>
+        </div>
+
+        <div class="content">
+            <!-- Системная информация -->
+            <div class="card">
+                <h3>📊 Системная информация</h3>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-value" id="cpu-percent">{{ system_info.cpu_percent }}%</div>
+                        <div class="info-label">CPU</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="cpu-progress" style="width: {{ system_info.cpu_percent }}%"></div>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-value" id="memory-percent">{{ system_info.memory_percent }}%</div>
+                        <div class="info-label">RAM ({{ system_info.memory_used }}/{{ system_info.memory_total }})</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="memory-progress" style="width: {{ system_info.memory_percent }}%"></div>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-value" id="disk-percent">{{ system_info.disk_percent }}%</div>
+                        <div class="info-label">Диск ({{ system_info.disk_used }}/{{ system_info.disk_total }})</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="disk-progress" style="width: {{ system_info.disk_percent }}%"></div>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-value">{{ system_info.cpu_temp }}</div>
+                        <div class="info-label">Температура CPU</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Статус сервисов -->
+            <div class="card">
+                <h3>🔧 Статус сервисов</h3>
+                <div class="status-item">
+                    <span>Nginx</span>
+                    <span class="status-badge status-{{ services.nginx if services.nginx == 'active' else 'stopped' }}">
+                        {{ services.nginx }}
+                    </span>
+                </div>
+                <div class="status-item">
+                    <span>Веб-приложение</span>
+                    <span class="status-badge status-{{ services.webapp if services.webapp == 'RUNNING' else 'stopped' }}">
+                        {{ services.webapp }}
+                    </span>
+                </div>
+                <div class="status-item">
+                    <span>Telegram бот</span>
+                    <span class="status-badge status-{{ services.telegram_bot if services.telegram_bot == 'RUNNING' else 'stopped' }}">
+                        {{ services.telegram_bot }}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Управление -->
+            <div class="card">
+                <h3>🎛️ Управление сервером</h3>
+                <div class="controls">
+                    <button class="btn btn-success" onclick="startServer()">🚀 Запустить</button>
+                    <button class="btn btn-danger" onclick="stopServer()">🛑 Остановить</button>
+                    <button class="btn btn-warning" onclick="restartServer()">🔄 Перезапустить</button>
+                    <button class="btn btn-primary" onclick="createBackup()">💾 Резервная копия</button>
+                    <button class="btn btn-warning" onclick="powerSave()">🔋 Экономия энергии</button>
+                </div>
+            </div>
+
+            <!-- Сетевая информация -->
+            <div class="card">
+                <h3>🌐 Сетевая информация</h3>
+                <div class="status-item">
+                    <span>Внешний IP</span>
+                    <span>{{ external_ip }}</span>
+                </div>
+                <div class="status-item">
+                    <span>Локальный IP</span>
+                    <span>{{ local_ip }}</span>
+                </div>
+                <div class="status-item">
+                    <span>Веб-панель управления</span>
+                    <span><a href="https://{{ local_ip }}:9090" target="_blank">Cockpit</a></span>
+                </div>
+            </div>
+
+            <div class="logs-link">
+                <a href="/logs">📋 Просмотр логов</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Выполняется команда...</p>
+    </div>
+
+    <script>
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function updateProgressBars() {
+            const cpuPercent = parseInt(document.getElementById('cpu-percent').textContent);
+            const memoryPercent = parseInt(document.getElementById('memory-percent').textContent);
+            const diskPercent = parseInt(document.getElementById('disk-percent').textContent);
+
+            // Обновление цветов прогресс-баров
+            const cpuProgress = document.getElementById('cpu-progress');
+            const memoryProgress = document.getElementById('memory-progress');
+            const diskProgress = document.getElementById('disk-progress');
+
+            cpuProgress.className = 'progress-fill' + (cpuPercent > 80 ? ' danger' : cpuPercent > 60 ? ' warning' : '');
+            memoryProgress.className = 'progress-fill' + (memoryPercent > 80 ? ' danger' : memoryPercent > 60 ? ' warning' : '');
+            diskProgress.className = 'progress-fill' + (diskPercent > 80 ? ' danger' : diskPercent > 60 ? ' warning' : '');
+        }
+
+        function startServer() {
+            showLoading();
+            fetch('/api/start_server')
+                .then(response => response.json())
+                .then(data => {
+                    hideLoading();
+                    if (data.success) {
+                        alert('✅ Сервер запущен!');
+                        location.reload();
+                    } else {
+                        alert('❌ Ошибка: ' + data.error);
+                    }
+                });
+        }
+
+        function stopServer() {
+            if (confirm('Вы уверены, что хотите остановить сервер?')) {
+                showLoading();
+                fetch('/api/stop_server')
+                    .then(response => response.json())
+                    .then(data => {
+                        hideLoading();
+                        if (data.success) {
+                            alert('✅ Сервер остановлен!');
+                            location.reload();
+                        } else {
+                            alert('❌ Ошибка: ' + data.error);
+                        }
+                    });
+            }
+        }
+
+        function restartServer() {
+            if (confirm('Вы уверены, что хотите перезапустить сервер?')) {
+                showLoading();
+                fetch('/api/restart_server')
+                    .then(response => response.json())
+                    .then(data => {
+                        hideLoading();
+                        if (data.success) {
+                            alert('✅ Сервер перезапущен!');
+                            location.reload();
+                        } else {
+                            alert('❌ Ошибка: ' + data.error);
+                        }
+                    });
+            }
+        }
+
+        function createBackup() {
+            showLoading();
+            fetch('/api/backup')
+                .then(response => response.json())
+                .then(data => {
+                    hideLoading();
+                    if (data.success) {
+                        alert('✅ Резервная копия создана!');
+                    } else {
+                        alert('❌ Ошибка: ' + data.error);
+                    }
+                });
+        }
+
+        function powerSave() {
+            showLoading();
+            fetch('/api/power_save')
+                .then(response => response.json())
+                .then(data => {
+                    hideLoading();
+                    if (data.success) {
+                        alert('✅ Режим экономии энергии включен!');
+                    } else {
+                        alert('❌ Ошибка: ' + data.error);
+                    }
+                });
+        }
+
+        // Автообновление каждые 30 секунд
+        setInterval(() => {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.system) {
+                        document.getElementById('cpu-percent').textContent = data.system.cpu_percent + '%';
+                        document.getElementById('memory-percent').textContent = data.system.memory_percent + '%';
+                        document.getElementById('disk-percent').textContent = data.system.disk_percent + '%';
+                        
+                        document.getElementById('cpu-progress').style.width = data.system.cpu_percent + '%';
+                        document.getElementById('memory-progress').style.width = data.system.memory_percent + '%';
+                        document.getElementById('disk-progress').style.width = data.system.disk_percent + '%';
+                        
+                        updateProgressBars();
+                    }
+                });
+        }, 30000);
+
+        // Инициализация
+        updateProgressBars();
+    </script>
+</body>
+</html> 
