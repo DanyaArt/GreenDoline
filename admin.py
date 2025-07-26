@@ -113,13 +113,13 @@ def send_personal_message(user_id):
         flash('У пользователя не найден Telegram ID. Он должен написать боту /start.', 'danger')
         conn.close()
         return redirect(url_for('edit_user', user_id=user_id))
-    try:
-        bot.send_message(tg_user_id[0], message)
-        cursor.execute('INSERT INTO messages (user_id, sender, message) VALUES (?, ?, ?)', (tg_user_id[0], 'admin', message))
-        conn.commit()
-        flash('Сообщение отправлено пользователю в Telegram.', 'success')
-    except Exception as e:
-        flash(f'Ошибка отправки: {e}', 'danger')
+        try:
+            bot.send_message(tg_user_id[0], message)
+            cursor.execute('INSERT INTO messages (user_id, sender, message) VALUES (?, ?, ?)', (tg_user_id[0], 'admin', message))
+            conn.commit()
+            flash('Сообщение отправлено пользователю в Telegram.', 'success')
+        except Exception as e:
+            flash(f'Ошибка отправки: {e}', 'danger')
     conn.close()
     return redirect(url_for('edit_user', user_id=user_id))
 
